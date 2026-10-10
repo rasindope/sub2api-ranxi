@@ -1,0 +1,71 @@
+name: Custom image (rasindope)
+
+# 自定义分支 custom/main 的镜像构建。
+# 打 tz-<上游版本>-<序号> 形式的 tag（如 tz-v2.10.1-1）即构建并推送：
+#   ghcr.io/rasindope/sub2api-ranxi:tz-v2.10.1-1
+#   ghcr.io/rasindope/sub2api-ranxi:latest
+# 不使用 v* tag，避免触发上游的 release.yml。
+on:
+  push:
+    tags:
+      - 'tz-*'
+  workflow_dispatch:
+
+concurrency:
+  group: custom-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/sub2api-ranxi
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Custom patch tests
+        working-directory: backend
+        run: go test ./internal/service/ -run 'OpenAIRequestTimezone|OpenAIRequestLocale|OpenAIUpstreamAcceptLanguage' -count=1
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image tags
+        id: meta
+        run: |
+          ref="${GITHUB_REF_NAME//\//-}"
+          echo "version=${ref}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "tags=${IMAGE}:${ref},${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${IMAGE}:sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            GOPROXY=https://proxy.golang.org,direct
+            GOSUMDB=sum.golang.org
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
