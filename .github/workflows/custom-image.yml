@@ -1,6 +1,6 @@
 name: Custom image (rasindope)
 
-# 自定义分支 custom/main 的镜像构建。
+# 自定义分支 custom/main 的镜像构建（上游 + Accept-Language 补丁）。
 # 打 tz-<上游版本>-<序号> 形式的 tag（如 tz-v2.10.1-1）即构建并推送：
 #   ghcr.io/rasindope/sub2api-ranxi:tz-v2.10.1-1
 #   ghcr.io/rasindope/sub2api-ranxi:latest
@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Custom patch tests
         working-directory: backend
-        run: go test ./internal/service/ -run 'OpenAIRequestTimezone|OpenAIRequestLocale|OpenAIUpstreamAcceptLanguage' -count=1
+        run: go test ./internal/service/ -run 'OpenAIRequestTimezone|OpenAIRequestLocale|OpenAIRequestLanguage|AcceptLanguage' -count=1
 
   image:
     needs: test
